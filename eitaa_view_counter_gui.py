@@ -289,8 +289,10 @@ class EitaaGUI(tk.Tk):
                 try:
                     results = core.scrape_range_by_mid(channel, start_mid, end_mid,
                                                          use_login=use_login, headless=headless,
-                                                         delay=delay, log_fn=self._log)
-                    # اعمال فیلتر تاریخ اگر مشخص شده باشد
+                                                         delay=delay, log_fn=self._log,
+                                                         start_date=start_date, end_date=end_date)
+                    # فیلتر تاریخ دیگر لازم نیست چون داخل scrape_range_by_mid انجام شده
+                    # اما برای اطمینان از صحت کار، اگر نتیجه‌ای داشتیم دوباره فیلتر می‌کنیم
                     if start_date or end_date:
                         results = core.filter_by_date_range(results, start_date, end_date, log_fn=self._log)
                     core.save_csv_mid_range(results, out_path, log_fn=self._log)
