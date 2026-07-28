@@ -373,27 +373,45 @@ def scrape_by_date_range(channel, use_login, headless=True, delay=1.0,
             for item in batch:
                 mid = item.get("mid")
                 if mid and mid.isdigit() and mid not in collected:
-                    collected[mid] = item
-                    new_found = True
+                    post_date_str = item.get("date")
+                    post_dt = parse_persian_date(post_date_str)
                     
-                    # اگر تاریخ مشخص شده، چک کن که از بازه خارج نشده باشیم
+                    # تصمیم‌گیری درباره اینکه آیا این پست را نگه داریم یا نه
+                    keep_post = True
+                    
                     if start_dt or end_dt:
-                        post_dt = parse_persian_date(item.get("date"))
                         if post_dt:
                             # چون داریم از انتها به بالا اسکرول می‌کنیم (تاریخ‌های قدیمی‌تر)،
                             # اگر به پستی رسیدیم که تاریخش قبل از start_date بود، یعنی از بازه گذشتیم
                             if start_dt and post_dt < start_dt:
                                 date_out_of_range = True
-                                log_fn(f"رسیدیم به پست با تاریخ {item.get('date')} ({post_dt.date()}) "
-                                       f"که قبل از تاریخ شروع ({start_dt.date()}) است. توقف اسکرول.")
+                                log_fn(f"❌ پست #{mid} | تاریخ: {post_date_str} ({post_dt.date()}) | "
+                                       f"قبل از تاریخ شروع ({start_dt.date()}) - توقف اسکرول")
                                 break
-                            # اگر تاریخ بعد از end_date بود، هنوز در آینده‌ایم، ادامه بده
-                            # (این حالت معمولاً وقتی اتفاق می‌افتد که از پایین شروع کرده‌ایم)
+                            # اگر تاریخ بعد از end_date بود، یعنی هنوز در آینده‌ایم (پست جدیدتر)
+                            # این پست را نادیده بگیر ولی ادامه بده
+                            if end_dt and post_dt >= end_dt:
+                                keep_post = False
+                                log_fn(f"⏭️ پست #{mid} | تاریخ: {post_date_str} ({post_dt.date()}) | "
+                                       f"بعد از تاریخ پایان ({(end_dt - timedelta(days=1)).date()}) - نادیده گرفته شد")
+                            else:
+                                # داخل بازه است
+                                log_fn(f"✅ پست #{mid} | تاریخ: {post_date_str} ({post_dt.date()}) | "
+                                       f"داخل بازه - پذیرفته شد")
+                        else:
+                            # تاریخ نامعتبر یا پیدا نشد
+                            log_fn(f"⚠️ پست #{mid} | تاریخ نامعتبر: {post_date_str} - نادیده گرفته شد")
+                            keep_post = False
+                    
+                    if keep_post:
+                        collected[mid] = item
+                        new_found = True
+                        log_fn(f"📊 پست #{mid} اضافه شد | بازدید: {item.get('views')} | تاریخ: {post_date_str}")
             
             if date_out_of_range:
                 break
 
-            log_fn(f"اسکرول #{scroll_round}: {len(collected)} پست جمع‌آوری شده تاکنون")
+            log_fn(f"🔄 اسکرول #{scroll_round}: {len(collected)} پست معتبر جمع‌آوری شده تاکنون")
 
             idle_scrolls = 0 if new_found else idle_scrolls + 1
             if idle_scrolls >= max_idle_scrolls:
