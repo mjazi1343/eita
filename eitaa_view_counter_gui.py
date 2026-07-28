@@ -70,53 +70,21 @@ class EitaaGUI(tk.Tk):
         self.channel_var = tk.StringVar()
         ttk.Entry(input_frame, textvariable=self.channel_var, width=30).grid(row=0, column=1, sticky="w", **pad)
 
-        self.mode_var = tk.StringVar(value="mid")
+        self.mode_var = tk.StringVar(value="date")
+        ttk.Radiobutton(input_frame, text="فقط بر اساس بازه‌ی تاریخ (اسکرول هوشمند از انتها)",
+                         variable=self.mode_var, value="date",
+                         command=self._toggle_mode).grid(row=1, column=0, columnspan=2, sticky="w", **pad)
         ttk.Radiobutton(input_frame, text="بازه بر اساس data-mid (پیشنهادی، مطمئن‌تر)",
                          variable=self.mode_var, value="mid",
-                         command=self._toggle_mode).grid(row=1, column=0, columnspan=2, sticky="w", **pad)
+                         command=self._toggle_mode).grid(row=2, column=0, columnspan=2, sticky="w", **pad)
         ttk.Radiobutton(input_frame, text="بازه‌ی شماره پست (URL)", variable=self.mode_var,
-                         value="range", command=self._toggle_mode).grid(row=2, column=0, sticky="e", **pad)
+                         value="range", command=self._toggle_mode).grid(row=3, column=0, sticky="e", **pad)
         ttk.Radiobutton(input_frame, text="فایل لیست لینک‌ها", variable=self.mode_var,
-                         value="file", command=self._toggle_mode).grid(row=2, column=1, sticky="w", **pad)
+                         value="file", command=self._toggle_mode).grid(row=3, column=1, sticky="w", **pad)
 
-        # بازه mid (پیشنهادی)
-        self.mid_frame = ttk.Frame(input_frame)
-        self.mid_frame.grid(row=3, column=0, columnspan=2, sticky="w")
-        ttk.Label(self.mid_frame, text="data-mid پست ابتدایی:").grid(row=0, column=0, **pad)
-        self.start_mid_var = tk.StringVar()
-        ttk.Entry(self.mid_frame, textvariable=self.start_mid_var, width=16).grid(row=0, column=1, **pad)
-        ttk.Label(self.mid_frame, text="data-mid پست انتهایی:").grid(row=0, column=2, **pad)
-        self.end_mid_var = tk.StringVar()
-        ttk.Entry(self.mid_frame, textvariable=self.end_mid_var, width=16).grid(row=0, column=3, **pad)
-        ttk.Label(self.mid_frame,
-                  text="(با راست‌کلیک روی پست → Inspect → data-mid را از تگ .bubble کپی کنید)",
-                  foreground="#666").grid(row=1, column=0, columnspan=4, sticky="w", padx=8)
-
-        # بازه شماره پست
-        self.range_frame = ttk.Frame(input_frame)
-        self.range_frame.grid(row=4, column=0, columnspan=2, sticky="w")
-        ttk.Label(self.range_frame, text="از شماره پست:").grid(row=0, column=0, **pad)
-        self.start_id_var = tk.StringVar()
-        ttk.Entry(self.range_frame, textvariable=self.start_id_var, width=12).grid(row=0, column=1, **pad)
-        ttk.Label(self.range_frame, text="تا شماره پست:").grid(row=0, column=2, **pad)
-        self.end_id_var = tk.StringVar()
-        ttk.Entry(self.range_frame, textvariable=self.end_id_var, width=12).grid(row=0, column=3, **pad)
-
-        # فایل لیست
-        self.file_frame = ttk.Frame(input_frame)
-        self.file_frame.grid(row=5, column=0, columnspan=2, sticky="w")
-        self.ids_file_var = tk.StringVar()
-        ttk.Entry(self.file_frame, textvariable=self.ids_file_var, width=40).grid(row=0, column=0, **pad)
-        ttk.Button(self.file_frame, text="انتخاب فایل...",
-                   command=self.on_browse_ids_file).grid(row=0, column=1, **pad)
-
-        ttk.Label(input_frame, text="تأخیر بین پست‌ها (ثانیه):").grid(row=6, column=0, sticky="e", **pad)
-        self.delay_var = tk.StringVar(value="1.5")
-        ttk.Entry(input_frame, textvariable=self.delay_var, width=8).grid(row=6, column=1, sticky="w", **pad)
-
-        # --- فیلتر تاریخ ---
-        date_frame = ttk.LabelFrame(input_frame, text="فیلتر بر اساس تاریخ پست (اختیاری)")
-        date_frame.grid(row=7, column=0, columnspan=2, sticky="we", padx=8, pady=4)
+        # فیلتر تاریخ - همیشه نمایش داده می‌شود
+        date_frame = ttk.LabelFrame(input_frame, text="فیلتر بر اساس تاریخ پست")
+        date_frame.grid(row=4, column=0, columnspan=2, sticky="we", padx=8, pady=4)
         
         ttk.Label(date_frame, text="از تاریخ (مثلاً ۱ مرداد):").grid(row=0, column=0, sticky="e", **pad)
         self.start_date_var = tk.StringVar()
@@ -129,14 +97,49 @@ class EitaaGUI(tk.Tk):
         ttk.Label(date_frame, text="(تاریخ‌های فارسی مثل '۴ مرداد' یا '1403/05/04' وارد کنید)",
                   foreground="#666").grid(row=1, column=0, columnspan=4, sticky="w", padx=8)
 
+        # بازه mid (پیشنهادی)
+        self.mid_frame = ttk.Frame(input_frame)
+        self.mid_frame.grid(row=5, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.mid_frame, text="data-mid پست ابتدایی:").grid(row=0, column=0, **pad)
+        self.start_mid_var = tk.StringVar()
+        ttk.Entry(self.mid_frame, textvariable=self.start_mid_var, width=16).grid(row=0, column=1, **pad)
+        ttk.Label(self.mid_frame, text="data-mid پست انتهایی:").grid(row=0, column=2, **pad)
+        self.end_mid_var = tk.StringVar()
+        ttk.Entry(self.mid_frame, textvariable=self.end_mid_var, width=16).grid(row=0, column=3, **pad)
+        ttk.Label(self.mid_frame,
+                  text="(با راست‌کلیک روی پست → Inspect → data-mid را از تگ .bubble کپی کنید)",
+                  foreground="#666").grid(row=1, column=0, columnspan=4, sticky="w", padx=8)
+
+        # بازه شماره پست
+        self.range_frame = ttk.Frame(input_frame)
+        self.range_frame.grid(row=6, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.range_frame, text="از شماره پست:").grid(row=0, column=0, **pad)
+        self.start_id_var = tk.StringVar()
+        ttk.Entry(self.range_frame, textvariable=self.start_id_var, width=12).grid(row=0, column=1, **pad)
+        ttk.Label(self.range_frame, text="تا شماره پست:").grid(row=0, column=2, **pad)
+        self.end_id_var = tk.StringVar()
+        ttk.Entry(self.range_frame, textvariable=self.end_id_var, width=12).grid(row=0, column=3, **pad)
+
+        # فایل لیست
+        self.file_frame = ttk.Frame(input_frame)
+        self.file_frame.grid(row=7, column=0, columnspan=2, sticky="w")
+        self.ids_file_var = tk.StringVar()
+        ttk.Entry(self.file_frame, textvariable=self.ids_file_var, width=40).grid(row=0, column=0, **pad)
+        ttk.Button(self.file_frame, text="انتخاب فایل...",
+                   command=self.on_browse_ids_file).grid(row=0, column=1, **pad)
+
+        ttk.Label(input_frame, text="تأخیر بین پست‌ها (ثانیه):").grid(row=8, column=0, sticky="e", **pad)
+        self.delay_var = tk.StringVar(value="1.5")
+        ttk.Entry(input_frame, textvariable=self.delay_var, width=8).grid(row=8, column=1, sticky="w", **pad)
+
         self.show_browser_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(input_frame, text="نمایش مرورگر حین اجرا (برای دیباگ)",
-                         variable=self.show_browser_var).grid(row=8, column=0, columnspan=2, sticky="w", **pad)
+                         variable=self.show_browser_var).grid(row=9, column=0, columnspan=2, sticky="w", **pad)
 
-        ttk.Label(input_frame, text="فایل خروجی CSV:").grid(row=9, column=0, sticky="e", **pad)
+        ttk.Label(input_frame, text="فایل خروجی CSV:").grid(row=10, column=0, sticky="e", **pad)
         self.out_var = tk.StringVar(value=str(Path.cwd() / "eitaa_views.csv"))
         out_row = ttk.Frame(input_frame)
-        out_row.grid(row=9, column=1, sticky="w")
+        out_row.grid(row=10, column=1, sticky="w")
         ttk.Entry(out_row, textvariable=self.out_var, width=32).pack(side="left")
         ttk.Button(out_row, text="...", width=3, command=self.on_browse_out).pack(side="left", padx=4)
 
@@ -161,7 +164,12 @@ class EitaaGUI(tk.Tk):
 
     def _toggle_mode(self):
         mode = self.mode_var.get()
-        if mode == "mid":
+        if mode == "date":
+            # در حالت تاریخ، هیچ‌کدام از فیلدهای mid/range/file نیاز نیستند
+            self.mid_frame.grid_remove()
+            self.range_frame.grid_remove()
+            self.file_frame.grid_remove()
+        elif mode == "mid":
             self.mid_frame.grid()
             self.range_frame.grid_remove()
             self.file_frame.grid_remove()
@@ -169,7 +177,7 @@ class EitaaGUI(tk.Tk):
             self.range_frame.grid()
             self.mid_frame.grid_remove()
             self.file_frame.grid_remove()
-        else:
+        else:  # file
             self.file_frame.grid()
             self.mid_frame.grid_remove()
             self.range_frame.grid_remove()
@@ -234,7 +242,14 @@ class EitaaGUI(tk.Tk):
         start_mid = end_mid = None
         mode = self.mode_var.get()
 
-        if mode == "mid":
+        if mode == "date":
+            # حالت فقط بر اساس تاریخ - نیازی به mid یا post_ids نیست
+            start_date_check = self.start_date_var.get().strip()
+            end_date_check = self.end_date_var.get().strip()
+            if not start_date_check and not end_date_check:
+                messagebox.showwarning("خطا", "حداقل یکی از تاریخ شروع یا پایان را وارد کنید.")
+                return
+        elif mode == "mid":
             start_mid = self.start_mid_var.get().strip()
             end_mid = self.end_mid_var.get().strip()
             if not start_mid.isdigit() or not end_mid.isdigit():
@@ -251,7 +266,7 @@ class EitaaGUI(tk.Tk):
                 messagebox.showwarning("خطا", "شماره پست پایان باید بزرگ‌تر یا مساوی شروع باشد.")
                 return
             post_ids = list(range(start_id, end_id + 1))
-        else:
+        else:  # file
             ids_file = self.ids_file_var.get().strip()
             if not ids_file or not Path(ids_file).exists():
                 messagebox.showwarning("خطا", "فایل لیست را انتخاب کنید.")
@@ -281,6 +296,28 @@ class EitaaGUI(tk.Tk):
         self.run_btn.config(state="disabled")
         self.progress.start(12)
         self.log_text.delete("1.0", "end")
+
+        if mode == "date":
+            self._log(f"شروع اسکرپینگ بر اساس بازه‌ی تاریخی {start_date or 'اول'} تا {end_date or 'آخر'} از کانال @{channel} ...")
+
+            def worker():
+                try:
+                    results = core.scrape_by_date_range(channel, use_login=use_login, headless=headless,
+                                                         delay=delay, log_fn=self._log,
+                                                         start_date=start_date, end_date=end_date)
+                    core.save_csv_mid_range(results, out_path, log_fn=self._log)
+                    self._log("\n✅ اسکرپینگ تمام شد.")
+                    self.after(0, lambda: messagebox.showinfo("پایان", f"نتایج در فایل زیر ذخیره شد:\n{out_path}"))
+                except Exception as e:
+                    self._log(f"خطای کلی: {e}")
+                    self.after(0, lambda: messagebox.showerror("خطا", str(e)))
+                finally:
+                    self.worker_running = False
+                    self.after(0, lambda: self.run_btn.config(state="normal"))
+                    self.after(0, self.progress.stop)
+
+            threading.Thread(target=worker, daemon=True).start()
+            return
 
         if mode == "mid":
             self._log(f"شروع اسکرپینگ بازه data-mid {start_mid} تا {end_mid} از کانال @{channel} ...")
