@@ -56,13 +56,20 @@ import re
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from playwright.sync_api import sync_playwright
 
 STORAGE_STATE = "eitaa_session.json"
 BASE_URL = "https://web.eitaa.com"
 RETRY_WAIT_MS = 2500  # مکث اضافه (میلی‌ثانیه) وقتی بازدید خالی یا ۱ بود
+
+# نگاشت ماه‌های فارسی به عدد (شمسی)
+_PERSIAN_MONTHS = {
+    "فروردین": 1, "اردیبهشت": 2, "خرداد": 3, "تیر": 4,
+    "مرداد": 5, "شهریور": 6, "مهر": 7, "آبان": 8,
+    "آذر": 9, "دی": 10, "بهمن": 11, "اسفند": 12,
+}
 
 
 def login_and_save_session(log_fn=print, confirm_fn=None):
@@ -105,6 +112,94 @@ _DIGIT_MAP = str.maketrans(
 
 def normalize_digits(text: str) -> str:
     return text.translate(_DIGIT_MAP)
+
+
+def parse_persian_date(date_str: str):
+    """تاریخ فارسی به فرمت '۴ مرداد' یا '15 خرداد 1403' را به یک شیء datetime
+    تبدیل می‌کند. اگر سال ذکر نشده باشد، فرض می‌شود 1403 است.
+    در صورت خطا None برمی‌گرداند.
+    """
+    if not date_str:
+        return None
+    
+    # حذف تگ‌های HTML احتمالی مثل <span class="i18n">۴ مرداد</span>
+    date_str = re.sub(r'<[^>]+>', '', date_str)
+    
+    # نرمال‌سازی اعداد به انگلیسی
+    date_str = normalize_digits(date_str.strip())
+    
+    # الگوی ساده: روز + ماه (مثلاً "4 مرداد")
+    match = re.search(r"(\d{1,2})\s+(" + "|".join(_PERSIAN_MONTHS.keys()) + r")(?:\s+(\d{4}))?", 
+                      date_str, re.IGNORECASE)
+    if not match:
+        # تلاش برای الگوی کامل‌تر با سال
+        match = re.search(r"(\d{1,2})\s+(\w+)\s+(\d{4})", date_str)
+    
+    if not match:
+        return None
+    
+    day = int(match.group(1))
+    month_name = match.group(2)
+    year = int(match.group(3)) if match.group(3) else 1403
+    
+    month_num = _PERSIAN_MONTHS.get(month_name)
+    if month_num is None:
+        return None
+    
+    # تبدیل تاریخ شمسی به میلادی برای مقایسه
+    # از یک تبدیل تقریبی استفاده می‌کنیم (برای مقایسه‌ی بازه کافی است)
+    try:
+        gregorian_date = jalali_to_gregorian(year, month_num, day)
+        return datetime(gregorian_date[0], gregorian_date[1], gregorian_date[2])
+    except Exception:
+        return None
+
+
+def jalali_to_gregorian(jy, jm, jd):
+    """تبدیل تاریخ جلالی (شمسی) به میلادی.
+    ورودی: سال، ماه، روز به اعداد صحیح
+    خروجی: تاپل (year, month, day) به اعداد صحیح
+    """
+    gy_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    
+    jy -= 979
+    jm -= 1
+    jd -= 1
+    
+    j_day_no = 365 * jy + (jy // 33) * 8 + ((jy % 33) + 3) // 4
+    j_day_no += gy_days[jm] + jd
+    
+    g_day_no = j_day_no + 79
+    
+    gy = 1600 + 400 * (g_day_no // 146097)
+    g_day_no %= 146097
+    
+    leap = True
+    if g_day_no >= 36525:
+        g_day_no -= 1
+        gy += 100 * (g_day_no // 36524)
+        g_day_no %= 36524
+        if g_day_no >= 365:
+            g_day_no += 1
+        else:
+            leap = False
+    
+    gy += 4 * (g_day_no // 1461)
+    g_day_no %= 1461
+    
+    if g_day_no >= 366:
+        leap = False
+        g_day_no -= 1
+        gy += g_day_no // 365
+        g_day_no %= 365
+    
+    gm = 1
+    while g_day_no >= (gy_days[gm] + (1 if gm > 1 and leap else 0)):
+        gm += 1
+    
+    gd = g_day_no - gy_days[gm - 1] - (1 if gm > 1 and leap else 0) + 1
+    
+    return (gy, gm, gd)
 
 
 # جاوااسکریپتی که داخل صفحه اجرا می‌شود: بین همه‌ی پیام‌های کانال که در
@@ -393,6 +488,51 @@ def save_csv(results, out_path, log_fn=print):
     log_fn(f"مجموع بازدید {len([r for r in results if r['views'] is not None])} پست: {total}")
 
 
+def filter_by_date_range(results, start_date_str, end_date_str, log_fn=print):
+    """فیلتر کردن نتایج بر اساس بازه‌ی تاریخی شمسی.
+    
+    start_date_str و end_date_str می‌توانند به فرمت‌های زیر باشند:
+    - '۴ مرداد' یا '4 مرداد'
+    - '1403/05/04' یا '1403-05-04'
+    - '4/5/1403'
+    
+    این توابع تاریخ‌های فارسی را به میلادی تبدیل کرده و مقایسه می‌کند.
+    """
+    if not start_date_str and not end_date_str:
+        return results
+    
+    start_dt = parse_persian_date(start_date_str) if start_date_str else None
+    end_dt = parse_persian_date(end_date_str) if end_date_str else None
+    
+    # اگر تاریخ پایان داده شد، یک روز به آن اضافه کن تا شامل خود آن روز هم بشود
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)
+    
+    filtered = []
+    for r in results:
+        post_dt = parse_persian_date(r.get("date"))
+        if post_dt is None:
+            continue
+        
+        if start_dt and post_dt < start_dt:
+            continue
+        if end_dt and post_dt >= end_dt:
+            continue
+        
+        filtered.append(r)
+    
+    log_fn(f"\n--- فیلتر تاریخ ---")
+    log_fn(f"بازه‌ی زمانی: {start_date_str or 'اول'} تا {end_date_str or 'آخر'}")
+    log_fn(f"تعداد پست‌ها قبل از فیلتر: {len(results)}")
+    log_fn(f"تعداد پست‌ها بعد از فیلتر: {len(filtered)}")
+    
+    if filtered:
+        total = sum(r["views"] for r in filtered if r["views"] is not None)
+        log_fn(f"مجموع بازدید پست‌های فیلترشده: {total}")
+    
+    return filtered
+
+
 def main():
     parser = argparse.ArgumentParser(description="Eitaa channel post view counter")
     parser.add_argument("--login", action="store_true",
@@ -455,9 +595,7 @@ def main():
                             headless=args.headless, delay=args.delay)
 
     if args.start_date or args.end_date:
-        # فیلتر ساده‌ی متنی؛ اگر فرمت تاریخ سایت مشخص شد، این بخش را
-        # می‌توان دقیق‌تر با datetime.strptime پیاده‌سازی کرد.
-        print("توجه: فیلتر تاریخ فعلاً ساده است، خروجی CSV کامل را هم بررسی کنید.")
+        results = filter_by_date_range(results, args.start_date, args.end_date)
 
     save_csv(results, args.out)
 
