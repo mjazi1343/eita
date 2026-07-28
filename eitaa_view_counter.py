@@ -331,7 +331,8 @@ def collect_visible_posts(page):
 
 
 def scrape_range_by_mid(channel, start_mid, end_mid, use_login, headless=True,
-                         delay=1.0, max_idle_scrolls=15, log_fn=print):
+                         delay=1.0, max_idle_scrolls=15, log_fn=print,
+                         start_date=None, end_date=None):
     """به‌جای پرش مستقیم به شماره پست (که به‌خاطر لود تنبل/مجازی‌سازی
     غیرقابل‌اعتماد است)، از بالای کانال شروع به اسکرول تدریجی به بالا
     می‌کند (لود تاریخچه) و همه‌ی پست‌های بین start_mid و end_mid را
@@ -340,9 +341,18 @@ def scrape_range_by_mid(channel, start_mid, end_mid, use_login, headless=True,
     start_mid / end_mid: مقدار data-mid پست ابتدایی و انتهایی بازه
         (با Inspect از روی خود پست‌ها گرفته می‌شود؛ ترتیبشان مهم نیست،
         خودش کوچک/بزرگ را تشخیص می‌دهد).
+    
+    start_date / end_date: اگر داده شوند، به محض اینکه اولین پست با تاریخ
+        خارج از بازه دیده شود، اسکرول متوقف می‌شود (برای صرفه‌جویی در زمان).
     """
     lo, hi = sorted([int(start_mid), int(end_mid)])
     collected = {}
+    
+    # تبدیل تاریخ‌های ورودی به datetime برای مقایسه
+    start_dt = parse_persian_date(start_date) if start_date else None
+    end_dt = parse_persian_date(end_date) if end_date else None
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)  # شامل خود روز پایان هم بشود
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -358,6 +368,7 @@ def scrape_range_by_mid(channel, start_mid, end_mid, use_login, headless=True,
 
         idle_scrolls = 0
         scroll_round = 0
+        date_out_of_range = False
         while True:
             batch = collect_visible_posts(page)
             new_found = False
@@ -366,6 +377,22 @@ def scrape_range_by_mid(channel, start_mid, end_mid, use_login, headless=True,
                 if mid and mid.isdigit() and mid not in collected:
                     collected[mid] = item
                     new_found = True
+                    
+                    # اگر تاریخ مشخص شده، چک کن که از بازه خارج نشده باشیم
+                    if start_dt or end_dt:
+                        post_dt = parse_persian_date(item.get("date"))
+                        if post_dt:
+                            # چون داریم از انتها به بالا اسکرول می‌کنیم (تاریخ‌های قدیمی‌تر)،
+                            # اگر به پستی رسیدیم که تاریخش قبل از start_date بود، یعنی از بازه گذشتیم
+                            if start_dt and post_dt < start_dt:
+                                date_out_of_range = True
+                                log_fn(f"رسیدیم به پست با تاریخ {item.get('date')} که قبل از تاریخ شروع است. توقف اسکرول.")
+                                break
+                            # اگر تاریخ بعد از end_date بود، هنوز در آینده‌ایم، ادامه بده
+                            # (این حالت معمولاً وقتی اتفاق می‌افتد که از پایین شروع کرده‌ایم)
+            
+            if date_out_of_range:
+                break
 
             mids_int = [int(m) for m in collected if m.isdigit()]
             covered_lo = any(m <= lo for m in mids_int) if mids_int else False
