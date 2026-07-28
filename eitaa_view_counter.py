@@ -330,6 +330,89 @@ def collect_visible_posts(page):
     return cleaned
 
 
+def scrape_by_date_range(channel, use_login, headless=True, delay=1.0,
+                         max_idle_scrolls=30, log_fn=print,
+                         start_date=None, end_date=None):
+    """اسکرول از انتهای کانال به سمت بالا و جمع‌آوری پست‌ها تا زمانی که
+    به اولین پست با تاریخ خارج از بازه برسیم.
+    
+    start_date / end_date: تاریخ شروع و پایان به فرمت فارسی (مثلاً '۴ مرداد')
+    اگر None باشند، تمام پست‌ها تا ابتدای کانال جمع‌آوری می‌شوند.
+    """
+    collected = {}
+    
+    # تبدیل تاریخ‌های ورودی به datetime برای مقایسه
+    start_dt = parse_persian_date(start_date) if start_date else None
+    end_dt = parse_persian_date(end_date) if end_date else None
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)  # شامل خود روز پایان هم بشود
+    
+    if not start_dt and not end_dt:
+        log_fn("هشدتار: هیچ تاریخی مشخص نشده است. تمام پست‌ها جمع‌آوری می‌شوند.")
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        if use_login and Path(STORAGE_STATE).exists():
+            context = browser.new_context(storage_state=STORAGE_STATE)
+        else:
+            context = browser.new_context()
+        page = context.new_page()
+
+        log_fn(f"در حال باز کردن کانال @{channel} ...")
+        page.goto(f"{BASE_URL}/#@{channel}")
+        page.wait_for_timeout(3000)
+
+        idle_scrolls = 0
+        scroll_round = 0
+        date_out_of_range = False
+        
+        while True:
+            batch = collect_visible_posts(page)
+            new_found = False
+            
+            for item in batch:
+                mid = item.get("mid")
+                if mid and mid.isdigit() and mid not in collected:
+                    collected[mid] = item
+                    new_found = True
+                    
+                    # اگر تاریخ مشخص شده، چک کن که از بازه خارج نشده باشیم
+                    if start_dt or end_dt:
+                        post_dt = parse_persian_date(item.get("date"))
+                        if post_dt:
+                            # چون داریم از انتها به بالا اسکرول می‌کنیم (تاریخ‌های قدیمی‌تر)،
+                            # اگر به پستی رسیدیم که تاریخش قبل از start_date بود، یعنی از بازه گذشتیم
+                            if start_dt and post_dt < start_dt:
+                                date_out_of_range = True
+                                log_fn(f"رسیدیم به پست با تاریخ {item.get('date')} ({post_dt.date()}) "
+                                       f"که قبل از تاریخ شروع ({start_dt.date()}) است. توقف اسکرول.")
+                                break
+                            # اگر تاریخ بعد از end_date بود، هنوز در آینده‌ایم، ادامه بده
+                            # (این حالت معمولاً وقتی اتفاق می‌افتد که از پایین شروع کرده‌ایم)
+            
+            if date_out_of_range:
+                break
+
+            log_fn(f"اسکرول #{scroll_round}: {len(collected)} پست جمع‌آوری شده تاکنون")
+
+            idle_scrolls = 0 if new_found else idle_scrolls + 1
+            if idle_scrolls >= max_idle_scrolls:
+                log_fn("توقف: چند بار اسکرول شد ولی پیام جدیدی لود نشد "
+                       "(احتمالاً به ابتدای کانال رسیدیم).")
+                break
+
+            nudge_scroll_up(page)
+            page.wait_for_timeout(int(delay * 1000))
+            scroll_round += 1
+
+        browser.close()
+
+    # مرتب‌سازی بر اساس mid
+    results = [v for k, v in collected.items() if k.isdigit()]
+    results.sort(key=lambda x: int(x["mid"]))
+    return results
+
+
 def scrape_range_by_mid(channel, start_mid, end_mid, use_login, headless=True,
                          delay=1.0, max_idle_scrolls=15, log_fn=print,
                          start_date=None, end_date=None):
