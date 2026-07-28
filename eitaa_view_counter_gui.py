@@ -114,14 +114,29 @@ class EitaaGUI(tk.Tk):
         self.delay_var = tk.StringVar(value="1.5")
         ttk.Entry(input_frame, textvariable=self.delay_var, width=8).grid(row=6, column=1, sticky="w", **pad)
 
+        # --- فیلتر تاریخ ---
+        date_frame = ttk.LabelFrame(input_frame, text="فیلتر بر اساس تاریخ پست (اختیاری)")
+        date_frame.grid(row=7, column=0, columnspan=2, sticky="we", padx=8, pady=4)
+        
+        ttk.Label(date_frame, text="از تاریخ (مثلاً ۱ مرداد):").grid(row=0, column=0, sticky="e", **pad)
+        self.start_date_var = tk.StringVar()
+        ttk.Entry(date_frame, textvariable=self.start_date_var, width=16).grid(row=0, column=1, sticky="w", **pad)
+        
+        ttk.Label(date_frame, text="تا تاریخ (مثلاً ۱۰ شهریور):").grid(row=0, column=2, sticky="e", **pad)
+        self.end_date_var = tk.StringVar()
+        ttk.Entry(date_frame, textvariable=self.end_date_var, width=16).grid(row=0, column=3, sticky="w", **pad)
+        
+        ttk.Label(date_frame, text="(تاریخ‌های فارسی مثل '۴ مرداد' یا '1403/05/04' وارد کنید)",
+                  foreground="#666").grid(row=1, column=0, columnspan=4, sticky="w", padx=8)
+
         self.show_browser_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(input_frame, text="نمایش مرورگر حین اجرا (برای دیباگ)",
-                         variable=self.show_browser_var).grid(row=7, column=0, columnspan=2, sticky="w", **pad)
+                         variable=self.show_browser_var).grid(row=8, column=0, columnspan=2, sticky="w", **pad)
 
-        ttk.Label(input_frame, text="فایل خروجی CSV:").grid(row=8, column=0, sticky="e", **pad)
+        ttk.Label(input_frame, text="فایل خروجی CSV:").grid(row=9, column=0, sticky="e", **pad)
         self.out_var = tk.StringVar(value=str(Path.cwd() / "eitaa_views.csv"))
         out_row = ttk.Frame(input_frame)
-        out_row.grid(row=8, column=1, sticky="w")
+        out_row.grid(row=9, column=1, sticky="w")
         ttk.Entry(out_row, textvariable=self.out_var, width=32).pack(side="left")
         ttk.Button(out_row, text="...", width=3, command=self.on_browse_out).pack(side="left", padx=4)
 
@@ -257,6 +272,10 @@ class EitaaGUI(tk.Tk):
         out_path = self.out_var.get().strip() or "eitaa_views.csv"
         headless = not self.show_browser_var.get()
         use_login = Path(core.STORAGE_STATE).exists()
+        
+        # دریافت تاریخ‌های فیلتر
+        start_date = self.start_date_var.get().strip() or None
+        end_date = self.end_date_var.get().strip() or None
 
         self.worker_running = True
         self.run_btn.config(state="disabled")
@@ -271,6 +290,9 @@ class EitaaGUI(tk.Tk):
                     results = core.scrape_range_by_mid(channel, start_mid, end_mid,
                                                          use_login=use_login, headless=headless,
                                                          delay=delay, log_fn=self._log)
+                    # اعمال فیلتر تاریخ اگر مشخص شده باشد
+                    if start_date or end_date:
+                        results = core.filter_by_date_range(results, start_date, end_date, log_fn=self._log)
                     core.save_csv_mid_range(results, out_path, log_fn=self._log)
                     self._log("\n✅ اسکرپینگ تمام شد.")
                     self.after(0, lambda: messagebox.showinfo("پایان", f"نتایج در فایل زیر ذخیره شد:\n{out_path}"))
@@ -291,6 +313,9 @@ class EitaaGUI(tk.Tk):
             try:
                 results = core.scrape_posts(channel, post_ids, use_login=use_login,
                                              headless=headless, delay=delay, log_fn=self._log)
+                # اعمال فیلتر تاریخ اگر مشخص شده باشد
+                if start_date or end_date:
+                    results = core.filter_by_date_range(results, start_date, end_date, log_fn=self._log)
                 core.save_csv(results, out_path, log_fn=self._log)
                 self._log("\n✅ اسکرپینگ تمام شد.")
                 self.after(0, lambda: messagebox.showinfo("پایان", f"نتایج در فایل زیر ذخیره شد:\n{out_path}"))

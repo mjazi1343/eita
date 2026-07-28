@@ -115,7 +115,7 @@ def normalize_digits(text: str) -> str:
 
 
 def parse_persian_date(date_str: str):
-    """تاریخ فارسی به فرمت '۴ مرداد' یا '15 خرداد 1403' را به یک شیء datetime
+    """تاریخ فارسی به فرمت '۴ مرداد' یا '15 خرداد 1403' یا '1403/05/04' را به یک شیء datetime
     تبدیل می‌کند. اگر سال ذکر نشده باشد، فرض می‌شود 1403 است.
     در صورت خطا None برمی‌گرداند.
     """
@@ -127,6 +127,17 @@ def parse_persian_date(date_str: str):
     
     # نرمال‌سازی اعداد به انگلیسی
     date_str = normalize_digits(date_str.strip())
+    
+    # الگوی تاریخ عددی: YYYY/MM/DD یا YYYY-MM-DD
+    match = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", date_str)
+    if match:
+        year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 1300 <= year <= 1500 and 1 <= month <= 12 and 1 <= day <= 31:
+            try:
+                gregorian_date = jalali_to_gregorian(year, month, day)
+                return datetime(gregorian_date[0], gregorian_date[1], gregorian_date[2])
+            except Exception:
+                return None
     
     # الگوی ساده: روز + ماه (مثلاً "4 مرداد")
     match = re.search(r"(\d{1,2})\s+(" + "|".join(_PERSIAN_MONTHS.keys()) + r")(?:\s+(\d{4}))?", 
